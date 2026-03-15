@@ -26,7 +26,7 @@ import warnings
 warnings.filterwarnings("ignore")  # suprimir advertencias SSL
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -338,6 +338,64 @@ def endpoint_consultar():
 @app.route("/ping", methods=["GET"])
 def ping():
     return jsonify({"status": "ok", "timestamp": datetime.now().isoformat()})
+
+
+@app.route("/diagnostico", methods=["GET"])
+def diagnostico():
+    """
+    Endpoint de diagnóstico: verifica la conectividad con el portal DIAN.
+    Útil para detectar si el servidor cloud puede alcanzar muisca.dian.gov.co.
+    Visitar: https://TU-APP.railway.app/diagnostico
+    """
+    import socket
+    resultado = {
+        "timestamp":   datetime.now().isoformat(),
+        "url_dian":    URL_DIAN,
+        "dns_muisca":  None,
+        "get_status":  None,
+        "get_url_final": None,
+        "viewstate_encontrado": False,
+        "campo_nit_encontrado": False,
+        "error": None,
+    }
+
+    # Verificar resolución DNS
+    try:
+        ip = socket.gethostbyname("muisca.dian.gov.co")
+        resultado["dns_muisca"] = ip
+    except Exception as e:
+        resultado["dns_muisca"] = f"ERROR DNS: {e}"
+        resultado["error"] = str(e)
+        return jsonify(resultado), 503
+
+    # Intentar GET al portal
+    try:
+        session = crear_sesion()
+        r = session.get(URL_DIAN, timeout=15)
+        resultado["get_status"]    = r.status_code
+        resultado["get_url_final"] = r.url
+
+        soup = BeautifulSoup(r.content, "html.parser", from_encoding="iso-8859-1")
+
+        # Verificar ViewState
+        vs = soup.find("input", {"name": "javax.faces.ViewState"})
+        resultado["viewstate_encontrado"] = bool(vs and vs.get("value"))
+
+        # Verificar campo NIT
+        campo = soup.find(id=SEL["campo_nit"])
+        resultado["campo_nit_encontrado"] = bool(campo)
+
+        if not resultado["viewstate_encontrado"]:
+            resultado["error"] = (
+                "ViewState no encontrado. El portal puede haber redirigido "
+                "al portal principal o estar bloqueando IPs de datacenter."
+            )
+    except Exception as e:
+        resultado["error"] = str(e)
+        log.error(f"[DIAGNOSTICO] {e}")
+        return jsonify(resultado), 503
+
+    return jsonify(resultado)
 
 
 # ─────────────────────────────────────────────────────────────────────
