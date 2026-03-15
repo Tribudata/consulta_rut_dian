@@ -489,9 +489,7 @@
 
   <!-- NOTA -->
   <div class="info-note">
-    <strong>⚠ Nota técnica:</strong> Esta interfaz se conecta al backend local en
-    <code>http://localhost:5000</code>. Si no está activo, se muestran datos de demostración.
-    Consulta el archivo <strong>backend_dian.py</strong> para instrucciones de instalación.
+    <strong>⚠ Nota técnica:</strong> Si no está activo, se muestran datos de demostración.
   </div>
 
 </div><!-- /wrapper -->
@@ -552,7 +550,7 @@ const API = (() => {
     return window.location.origin + '/consultar-rut';
   }
   // Si el HTML se abre desde Google Sites u otro dominio → apunta a Railway
-  return 'https://search-nit-dian.up.railway.app/consultar-rut';
+  return 'https://search-nit-dian.up.railway.app/';
 })();
 console.log('[ConsultaRUT] API URL:', API);
 const st  = { plan:'free', usados:0, historial:[], nits:[], resultados:[], planModal:'pro100' };
