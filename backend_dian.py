@@ -28,6 +28,24 @@ warnings.filterwarnings("ignore")  # suprimir advertencias SSL
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
+# ── Headers CORS manuales — garantizan compatibilidad con file:// y cualquier origen ──
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"]  = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    return response
+
+@app.route("/consultar-rut", methods=["OPTIONS"])
+def options_consultar():
+    """Responde al preflight CORS que hace el navegador antes del POST."""
+    from flask import Response
+    r = Response()
+    r.headers["Access-Control-Allow-Origin"]  = "*"
+    r.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+    return r, 204
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
 
