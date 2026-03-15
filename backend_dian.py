@@ -26,25 +26,28 @@ import warnings
 warnings.filterwarnings("ignore")  # suprimir advertencias SSL
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=False)
 
-# ── Headers CORS manuales — garantizan compatibilidad con file:// y cualquier origen ──
+# ── CORS: acepta cualquier origen incluyendo iframes de Google Sites ──
 @app.after_request
 def add_cors_headers(response):
     response.headers["Access-Control-Allow-Origin"]  = "*"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Max-Age"]       = "86400"
     return response
 
+# ── Preflight OPTIONS — debe responder 200 (no 204) para Google Sites ──
 @app.route("/consultar-rut", methods=["OPTIONS"])
-def options_consultar():
-    """Responde al preflight CORS que hace el navegador antes del POST."""
+@app.route("/diagnostico",   methods=["OPTIONS"])
+@app.route("/ping",          methods=["OPTIONS"])
+def handle_options():
     from flask import Response
-    r = Response()
+    r = Response("", status=200)
     r.headers["Access-Control-Allow-Origin"]  = "*"
-    r.headers["Access-Control-Allow-Headers"] = "Content-Type"
-    r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    return r, 204
+    r.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With"
+    r.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    r.headers["Access-Control-Max-Age"]       = "86400"
+    return r
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -351,6 +354,17 @@ def endpoint_consultar():
     except Exception as e:
         log.exception("Error inesperado")
         return jsonify({"error": f"Error interno: {str(e)}"}), 500
+
+
+@app.route("/", methods=["GET"])
+def index():
+    """Sirve la interfaz HTML directamente desde Railway — evita problemas de CORS con iframes."""
+    import os
+    html_path = os.path.join(os.path.dirname(__file__), "consulta_rut_dian.html")
+    if os.path.exists(html_path):
+        with open(html_path, "r", encoding="utf-8") as f:
+            return f.read(), 200, {"Content-Type": "text/html; charset=utf-8"}
+    return "<h2>Sube el archivo consulta_rut_dian.html al repositorio</h2>", 404
 
 
 @app.route("/ping", methods=["GET"])
