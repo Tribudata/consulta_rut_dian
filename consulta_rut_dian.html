@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ConsultaRUT · DIAN Colombia</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    :root {
+      --bg:      #0a0e1a;
+      --surface: #111827;
+      --surface2:#0f1520;
+      --border:  #1e2d45;
+      --accent:  #00d4ff;
+      --accent2: #0099cc;
+      --gold:    #f5c518;
+      --text:    #e8edf5;
+      --muted:   #5a6a80;
+      --success: #00e5a0;
+      --error:   #ff4d6d;
+      --warning: #ffb800;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    body {
+      font-family: 'Syne', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+      position: relative;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 20%, rgba(0,212,255,0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(245,197,24,0.03) 0%, transparent 50%);
+      animation: bgPulse 8s ease-in-out infinite alternate;
+      pointer-events: none; z-index: 0;
+    }
+    @keyframes bgPulse {
+      0%   { transform: scale(1) rotate(0deg); }
+      100% { transform: scale(1.05) rotate(2deg); }
+    }
+
+    .wrapper { width:100%; max-width:720px; position:relative; z-index:1; }
+
+    /* ── HEADER ── */
+    .header { text-align:center; margin-bottom:36px; animation:fadeDown 0.6s ease both; }
+    @keyframes fadeDown {
+      from { opacity:0; transform:translateY(-20px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    .badge {
+      display:inline-flex; align-items:center; gap:8px;
+      background:rgba(0,212,255,0.08); border:1px solid rgba(0,212,255,0.2);
+      border-radius:100px; padding:6px 16px;
+      font-family:'DM Mono',monospace; font-size:11px;
+      color:var(--accent); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:20px;
+    }
+    .badge::before {
+      content:''; width:6px; height:6px; border-radius:50%;
+      background:var(--accent); box-shadow:0 0 8px var(--accent);
+      animation:blink 2s ease infinite;
+    }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    h1 {
+      font-size:clamp(28px,5vw,42px); font-weight:800;
+      line-height:1.1; letter-spacing:-0.02em;
+    }
+    h1 span { color:var(--accent); }
+    .subtitle { margin-top:12px; color:var(--muted); font-size:15px; font-weight:400; }
+
+    /* ── PLAN BADGE + CUOTA ── */
+    .quota-wrap {
+      display:flex; align-items:center; gap:14px; flex-wrap:wrap;
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:14px; padding:16px 20px; margin-bottom:20px;
+      animation:fadeUp 0.5s 0.05s ease both;
+    }
+    .quota-info { flex:1; min-width:160px; }
+    .quota-label { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:6px; font-family:'DM Mono',monospace; }
+    .quota-track { height:4px; background:var(--border); border-radius:100px; overflow:hidden; }
+    .quota-fill  { height:100%; border-radius:100px; transition:width 0.4s; background:var(--accent); }
+    .quota-fill.warn { background:var(--warning); }
+    .quota-fill.full { background:var(--error); }
+    .quota-numbers { font-family:'DM Mono',monospace; font-size:12px; font-weight:500; margin-top:5px; }
+
+    .plan-pill {
+      display:inline-flex; align-items:center; gap:7px;
+      border:1.5px solid currentColor; border-radius:100px;
+      padding:5px 14px; font-size:11px; font-weight:700;
+      letter-spacing:0.08em; text-transform:uppercase; white-space:nowrap;
+    }
+    .plan-pill.free   { color:var(--muted);   border-color:var(--muted); }
+    .plan-pill.pro100 { color:var(--accent);   border-color:var(--accent); background:rgba(0,212,255,0.06); }
+    .plan-pill.pro500 { color:var(--gold);     border-color:var(--gold);   background:rgba(245,197,24,0.06); }
+    .plan-dot { width:6px; height:6px; border-radius:50%; background:currentColor; box-shadow:0 0 6px currentColor; }
+
+    .btn-auth {
+      padding:10px 18px; background:rgba(0,212,255,0.1);
+      border:1px solid rgba(0,212,255,0.3); border-radius:10px;
+      color:var(--accent); font-family:'Syne',sans-serif;
+      font-size:12px; font-weight:700; letter-spacing:0.06em;
+      cursor:pointer; transition:all 0.2s; white-space:nowrap;
+    }
+    .btn-auth:hover { background:rgba(0,212,255,0.2); box-shadow:0 0 16px rgba(0,212,255,0.2); }
+
+    /* ── CARD ── */
+    .card {
+      background:var(--surface); border:1px solid var(--border);
+      border-radius:20px; padding:32px;
+      animation:fadeUp 0.6s 0.1s ease both; position:relative; overflow:hidden;
+    }
+    .card::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,transparent,var(--accent),transparent); opacity:0.6;
+    }
+    @keyframes fadeUp {
+      from { opacity:0; transform:translateY(20px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* ── TABS ── */
+    .tabs { display:flex; gap:6px; margin-bottom:26px; }
+    .tab {
+      flex:1; padding:10px 14px; border-radius:10px;
+      border:1px solid var(--border); background:transparent;
+      color:var(--muted); font-family:'Syne',sans-serif;
+      font-size:12px; font-weight:700; cursor:pointer; transition:all 0.2s;
+      display:flex; align-items:center; justify-content:center; gap:7px;
+      letter-spacing:0.04em;
+    }
+    .tab:hover { border-color:var(--accent); color:var(--accent); }
+    .tab.active { background:rgba(0,212,255,0.08); border-color:var(--accent); color:var(--accent); }
+
+    .tab-panel { display:none; }
+    .tab-panel.active { display:block; }
+
+    /* ── INPUTS ── */
+    .form-group { margin-bottom:18px; }
+    label {
+      display:block; font-size:11px; font-weight:700;
+      letter-spacing:0.1em; text-transform:uppercase; color:var(--muted); margin-bottom:8px;
+    }
+    input[type="text"] {
+      width:100%; padding:14px 18px;
+      background:rgba(255,255,255,0.03); border:1px solid var(--border);
+      border-radius:12px; color:var(--text);
+      font-family:'DM Mono',monospace; font-size:16px; outline:none;
+      transition:all 0.2s; letter-spacing:0.06em;
+    }
+    input[type="text"]:focus {
+      border-color:var(--accent); background:rgba(0,212,255,0.04);
+      box-shadow:0 0 0 3px rgba(0,212,255,0.08);
+    }
+    input[type="text"]::placeholder { color:var(--muted); font-size:14px; letter-spacing:0.02em; }
+
+    /* ── BOTÓN PRINCIPAL ── */
+    .btn-main {
+      width:100%; padding:15px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      border:none; border-radius:12px; color:#000;
+      font-family:'Syne',sans-serif; font-size:14px; font-weight:800;
+      letter-spacing:0.05em; cursor:pointer; transition:all 0.2s;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .btn-main:hover { transform:translateY(-1px); box-shadow:0 8px 24px rgba(0,212,255,0.3); }
+    .btn-main:disabled { opacity:0.45; cursor:not-allowed; transform:none; }
+
+    /* ── RESULTADO INDIVIDUAL ── */
+    .result-box {
+      margin-top:22px; border:1px solid var(--border); border-radius:14px;
+      overflow:hidden; animation:fadeUp 0.35s ease both;
+    }
+    .result-head {
+      padding:12px 18px; display:flex; align-items:center;
+      justify-content:space-between; gap:10px; border-bottom:1px solid var(--border);
+    }
+    .result-head.activo    { background:rgba(0,229,160,0.07); }
+    .result-head.suspendido{ background:rgba(255,184,0,0.07); }
+    .result-head.inactivo  { background:rgba(255,77,109,0.07); }
+    .estado-chip {
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 12px; border-radius:100px;
+      font-size:11px; font-weight:700; letter-spacing:0.08em; text-transform:uppercase;
+    }
+    .estado-chip::before { content:''; width:6px; height:6px; border-radius:50%; background:currentColor; }
+    .estado-chip.activo    { background:rgba(0,229,160,0.12); color:var(--success); }
+    .estado-chip.suspendido{ background:rgba(255,184,0,0.12);  color:var(--warning); }
+    .estado-chip.inactivo  { background:rgba(255,77,109,0.12); color:var(--error); }
+    .result-body { padding:18px; background:rgba(255,255,255,0.01); }
+    .result-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:14px; }
+    .rf { display:flex; flex-direction:column; gap:3px; }
+    .rf-lbl { font-size:9px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted); font-family:'DM Mono',monospace; }
+    .rf-val { font-size:14px; font-weight:600; font-family:'DM Mono',monospace; }
+    .rf-val.big { font-family:'Syne',sans-serif; font-size:18px; font-weight:800; color:var(--accent); }
+    .demo-tag { font-size:10px; color:var(--warning); margin-left:8px; font-family:'DM Mono',monospace; }
+
+    /* ── UPLOAD ZONE ── */
+    .upload-zone {
+      border:2px dashed var(--border); border-radius:14px;
+      padding:36px 20px; text-align:center; cursor:pointer;
+      transition:all 0.2s; background:rgba(255,255,255,0.01); margin-bottom:16px;
+    }
+    .upload-zone:hover, .upload-zone.drag {
+      border-color:var(--accent); background:rgba(0,212,255,0.04);
+    }
+    .upload-zone input { display:none; }
+    .upload-icon { font-size:32px; margin-bottom:10px; }
+    .upload-title { font-size:16px; font-weight:800; margin-bottom:6px; }
+    .upload-desc { font-size:12px; color:var(--muted); line-height:1.6; font-family:'DM Mono',monospace; }
+
+    .upload-hint {
+      font-family:'DM Mono',monospace; font-size:11px; color:var(--muted);
+      background:rgba(255,255,255,0.02); border:1px solid var(--border);
+      border-radius:10px; padding:10px 14px; margin-bottom:16px; line-height:1.7;
+    }
+    .upload-hint strong { color:var(--text); }
+
+    /* ── TABLA ── */
+    .table-wrap { overflow-x:auto; border:1px solid var(--border); border-radius:12px; margin-bottom:14px; }
+    .table-wrap.scroll { max-height:300px; overflow-y:auto; }
+    table { width:100%; border-collapse:collapse; font-size:12px; font-family:'DM Mono',monospace; }
+    th {
+      background:rgba(0,212,255,0.08); color:var(--accent);
+      padding:9px 14px; text-align:left;
+      font-size:10px; letter-spacing:0.1em; text-transform:uppercase;
+      position:sticky; top:0; z-index:2; border-bottom:1px solid var(--border);
+    }
+    td { padding:9px 14px; border-bottom:1px solid rgba(255,255,255,0.04); vertical-align:middle; color:var(--text); }
+    tr:last-child td { border-bottom:none; }
+    tr:hover td { background:rgba(255,255,255,0.02); }
+
+    .td-estado { display:inline-flex; align-items:center; gap:5px; font-size:11px; font-weight:700; }
+    .dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+    .dot.activo    { background:var(--success); box-shadow:0 0 5px var(--success); }
+    .dot.suspendido{ background:var(--warning); box-shadow:0 0 5px var(--warning); }
+    .dot.inactivo  { background:var(--error);   box-shadow:0 0 5px var(--error); }
+    .dot.pendiente { background:var(--muted); }
+
+    /* ── PROGRESS ── */
+    .progress-section { margin-bottom:14px; }
+    .progress-label { font-size:11px; color:var(--muted); margin-bottom:6px; display:flex; justify-content:space-between; font-family:'DM Mono',monospace; }
+    .progress-track { height:5px; background:var(--border); border-radius:100px; overflow:hidden; }
+    .progress-bar   { height:100%; background:var(--accent); border-radius:100px; transition:width 0.3s; box-shadow:0 0 8px var(--accent); }
+
+    /* ── BTN ROW ── */
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:14px; }
+    .btn-sec {
+      padding:10px 18px; background:rgba(255,255,255,0.04);
+      border:1px solid var(--border); border-radius:10px;
+      color:var(--text); font-family:'Syne',sans-serif;
+      font-size:12px; font-weight:700; letter-spacing:0.05em;
+      cursor:pointer; transition:all 0.2s; display:flex; align-items:center; gap:6px;
+    }
+    .btn-sec:hover { border-color:var(--accent); color:var(--accent); }
+    .btn-sec:disabled { opacity:0.35; cursor:not-allowed; }
+    .btn-sec.primary {
+      background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#000;
+      border:none;
+    }
+    .btn-sec.primary:hover { transform:translateY(-1px); box-shadow:0 6px 18px rgba(0,212,255,0.3); }
+    .btn-sec.primary:disabled { transform:none; box-shadow:none; }
+
+    /* ── HISTORIAL ── */
+    .history-section { margin-top:28px; animation:fadeUp 0.4s ease both; }
+    .sec-title {
+      font-size:10px; letter-spacing:0.14em; text-transform:uppercase; color:var(--muted);
+      margin-bottom:10px; padding-bottom:8px; border-bottom:1px solid var(--border);
+      display:flex; justify-content:space-between; align-items:center;
+    }
+    .clear-btn { background:none; border:none; font-family:inherit; font-size:10px; color:var(--muted); cursor:pointer; letter-spacing:0.1em; }
+    .clear-btn:hover { color:var(--error); }
+    .hist-item {
+      display:flex; align-items:center; justify-content:space-between;
+      padding:9px 12px; border-radius:10px; cursor:pointer;
+      transition:background 0.15s; gap:12px;
+    }
+    .hist-item:hover { background:rgba(255,255,255,0.03); }
+    .hist-nit  { font-family:'DM Mono',monospace; font-size:13px; font-weight:500; }
+    .hist-name { font-size:11px; color:var(--muted); margin-top:2px; font-family:'DM Mono',monospace; }
+    .hist-time { font-size:10px; color:var(--muted); font-family:'DM Mono',monospace; }
+
+    /* ── MSGS ── */
+    .msg-box {
+      padding:13px 16px; border-radius:10px; font-size:12px; font-family:'DM Mono',monospace;
+      display:flex; align-items:center; gap:10px; line-height:1.5; margin-top:14px;
+    }
+    .msg-box.err  { background:rgba(255,77,109,0.08);  border:1px solid rgba(255,77,109,0.25);  color:var(--error); }
+    .msg-box.warn { background:rgba(255,184,0,0.08);   border:1px solid rgba(255,184,0,0.25);   color:var(--warning); }
+    .msg-box.info { background:rgba(0,212,255,0.07);   border:1px solid rgba(0,212,255,0.2);    color:var(--accent); }
+
+    .toast {
+      position:fixed; bottom:24px; right:24px; max-width:380px;
+      z-index:500; animation:fadeUp 0.3s ease;
+    }
+
+    /* ── MODAL ── */
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.7);
+      backdrop-filter:blur(6px);
+      display:flex; align-items:center; justify-content:center;
+      z-index:200; opacity:0; pointer-events:none; transition:opacity 0.2s;
+    }
+    .modal-overlay.open { opacity:1; pointer-events:all; }
+    .modal {
+      background:var(--surface); border:1px solid var(--border); border-radius:20px;
+      padding:36px; width:100%; max-width:420px;
+      transform:translateY(12px); transition:transform 0.2s; position:relative;
+    }
+    .modal::before {
+      content:''; position:absolute; top:0; left:0; right:0; height:2px;
+      background:linear-gradient(90deg,transparent,var(--accent),transparent); border-radius:20px 20px 0 0;
+    }
+    .modal-overlay.open .modal { transform:translateY(0); }
+    .modal-title { font-size:22px; font-weight:800; margin-bottom:6px; }
+    .modal-sub   { font-size:12px; color:var(--muted); margin-bottom:24px; line-height:1.6; font-family:'DM Mono',monospace; }
+
+    .plan-opts { display:flex; flex-direction:column; gap:10px; margin-bottom:22px; }
+    .plan-opt {
+      border:1px solid var(--border); border-radius:12px; padding:14px 16px;
+      cursor:pointer; transition:all 0.15s;
+      display:flex; align-items:center; gap:12px;
+    }
+    .plan-opt:hover { border-color:var(--accent); }
+    .plan-opt.sel   { border-color:var(--accent); background:rgba(0,212,255,0.06); }
+    .plan-opt-icon  { font-size:20px; }
+    .plan-opt-info  { flex:1; }
+    .plan-opt-name  { font-size:13px; font-weight:700; }
+    .plan-opt-desc  { font-size:11px; color:var(--muted); margin-top:2px; font-family:'DM Mono',monospace; }
+    .radio {
+      width:16px; height:16px; border-radius:50%; border:2px solid var(--border);
+      display:flex; align-items:center; justify-content:center; flex-shrink:0;
+    }
+    .plan-opt.sel .radio { border-color:var(--accent); }
+    .plan-opt.sel .radio::after { content:''; width:7px; height:7px; border-radius:50%; background:var(--accent); }
+
+    .modal-lbl { font-size:10px; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); display:block; margin-bottom:6px; }
+    .modal-inp {
+      width:100%; padding:12px 16px; border:1px solid var(--border); border-radius:10px;
+      background:rgba(255,255,255,0.03); color:var(--text);
+      font-family:'DM Mono',monospace; font-size:15px; outline:none;
+      transition:all 0.2s; letter-spacing:0.12em; margin-bottom:8px;
+    }
+    .modal-inp:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(0,212,255,0.08); }
+    .modal-inp.err-inp { border-color:var(--error); }
+    .modal-err { font-size:11px; color:var(--error); margin-bottom:14px; display:none; font-family:'DM Mono',monospace; }
+    .modal-err.show { display:block; }
+    .modal-close {
+      position:absolute; top:16px; right:18px;
+      background:none; border:none; font-size:20px; cursor:pointer; color:var(--muted);
+    }
+    .modal-close:hover { color:var(--text); }
+
+    /* ── NOTA INFO ── */
+    .info-note {
+      margin-top:28px; padding:14px 18px;
+      background:rgba(245,197,24,0.04); border:1px solid rgba(245,197,24,0.12);
+      border-radius:12px; font-size:12px; color:var(--muted); line-height:1.6;
+      font-family:'DM Mono',monospace; animation:fadeUp 0.6s 0.3s ease both;
+    }
+    .info-note strong { color:var(--gold); }
+
+    /* ── MISC ── */
+    .spin { display:inline-block; animation:spin 0.7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .divider { height:1px; background:var(--border); margin:20px 0; }
+
+    @media(max-width:540px) {
+      .card { padding:22px; }
+      .tabs { flex-direction:column; }
+      .btn-row { flex-direction:column; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="badge">Portal DIAN · Muisca</div>
+    <h1>Consulta de <span>Estado RUT</span></h1>
+    <p class="subtitle">Personas naturales y jurídicas — Fuente oficial DIAN Colombia</p>
+  </div>
+
+  <!-- CUOTA + PLAN -->
+  <div class="quota-wrap">
+    <div class="quota-info">
+      <div class="quota-label">Cuota de consultas</div>
+      <div class="quota-track"><div class="quota-fill" id="quotaFill" style="width:0%"></div></div>
+      <div class="quota-numbers" id="quotaNumbers">0 / 10 consultas utilizadas</div>
+    </div>
+    <div id="planDisplay"><span class="plan-pill free"><span class="plan-dot"></span>Plan Free</span></div>
+    <button class="btn-auth" onclick="openModal()">🔑 Activar código</button>
+  </div>
+
+  <!-- CARD PRINCIPAL -->
+  <div class="card">
+
+    <!-- TABS -->
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('individual',this)">👤 Consulta individual</button>
+      <button class="tab" onclick="showTab('masiva',this)">📊 Carga masiva Excel</button>
+    </div>
+
+    <!-- ════ TAB INDIVIDUAL ════ -->
+    <div class="tab-panel active" id="tab-individual">
+      <div class="form-group">
+        <label>NIT o número de documento</label>
+        <input type="text" id="nitInput" placeholder="Ej: 9001234567"
+               maxlength="15"
+               oninput="this.value=this.value.replace(/\D/g,'')"
+               onkeydown="if(event.key==='Enter') consultarInd()"/>
+      </div>
+      <button class="btn-main" id="btnBuscar" onclick="consultarInd()">
+        <span id="btnTxt">Consultar Estado RUT</span>
+      </button>
+      <div id="resultInd"></div>
+
+      <!-- Historial -->
+      <div class="history-section" id="histSec" style="display:none">
+        <div class="sec-title">
+          Consultas recientes
+          <button class="clear-btn" onclick="limpiarHist()">Borrar historial</button>
+        </div>
+        <div id="histList"></div>
+      </div>
+    </div>
+
+    <!-- ════ TAB MASIVA ════ -->
+    <div class="tab-panel" id="tab-masiva">
+      <div class="upload-hint">
+        <strong>Formato del archivo:</strong> Primera columna = NIT o número de documento, uno por fila.
+        Encabezado opcional · Formatos: <strong>.xlsx · .xls · .csv</strong><br/>
+        Free: 10 registros · PRO-100: hasta 100 · PRO-500: hasta 500
+      </div>
+
+      <div class="upload-zone" id="dropZone"
+           onclick="document.getElementById('fileInput').click()"
+           ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" onchange="cargarArchivo(event)"/>
+        <div class="upload-icon">📂</div>
+        <div class="upload-title">Arrastra tu archivo o haz clic aquí</div>
+        <div class="upload-desc">Excel o CSV con los NIT en la primera columna</div>
+      </div>
+
+      <div id="previewSec" style="display:none">
+        <div class="sec-title" style="margin-bottom:10px">
+          Vista previa
+          <span id="previewCount" style="color:var(--text);font-weight:700"></span>
+        </div>
+        <div class="table-wrap scroll">
+          <table>
+            <thead><tr><th>#</th><th>NIT / Documento</th><th>Estado</th></tr></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+
+        <div class="btn-row">
+          <button class="btn-sec primary" id="btnIniciar" onclick="iniciarMasiva()">▶ Iniciar consulta masiva</button>
+          <button class="btn-sec" id="btnExportar" onclick="exportarExcel()" disabled>⬇ Exportar Excel</button>
+          <button class="btn-sec" onclick="resetMasiva()">✕ Nuevo archivo</button>
+        </div>
+
+        <div class="progress-section" id="progressSec" style="display:none">
+          <div class="progress-label">
+            <span id="progressMsg">Consultando...</span>
+            <span id="progressPct">0%</span>
+          </div>
+          <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+        </div>
+
+        <div id="resultadosMasivos"></div>
+      </div>
+    </div>
+
+  </div><!-- /card -->
+
+  <!-- NOTA -->
+  <div class="info-note">
+    <strong>⚠ Nota técnica:</strong> Esta interfaz se conecta al backend local en
+    <code>http://localhost:5000</code>. Si no está activo, se muestran datos de demostración.
+    Consulta el archivo <strong>backend_dian.py</strong> para instrucciones de instalación.
+  </div>
+
+</div><!-- /wrapper -->
+
+<!-- ════ MODAL AUTH ════ -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModalOutside(event)">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">×</button>
+    <div class="modal-title">Activar código de acceso</div>
+    <div class="modal-sub">Selecciona el tipo de plan e ingresa tu código para ampliar el límite de consultas.</div>
+
+    <div class="plan-opts">
+      <div class="plan-opt sel" id="opt100" onclick="selectPlan('pro100')">
+        <span class="plan-opt-icon">🔷</span>
+        <div class="plan-opt-info">
+          <div class="plan-opt-name">PRO · 100 consultas</div>
+          <div class="plan-opt-desc">Individual y masivo hasta 100 NIT por ciclo</div>
+        </div>
+        <div class="radio"></div>
+      </div>
+      <div class="plan-opt" id="opt500" onclick="selectPlan('pro500')">
+        <span class="plan-opt-icon">🌟</span>
+        <div class="plan-opt-info">
+          <div class="plan-opt-name">PRO · 500 consultas</div>
+          <div class="plan-opt-desc">Individual y masivo hasta 500 NIT por ciclo</div>
+        </div>
+        <div class="radio"></div>
+      </div>
+    </div>
+
+    <label class="modal-lbl">Código de activación</label>
+    <input class="modal-inp" id="codInput" type="text" maxlength="20"
+           placeholder="XXXX-XXXX-XXXX"
+           oninput="this.value=this.value.toUpperCase()"
+           onkeydown="if(event.key==='Enter') activarCodigo()"/>
+    <div class="modal-err" id="modalErr">Código incorrecto. Verifica e intenta de nuevo.</div>
+    <button class="btn-main" onclick="activarCodigo()">Activar código</button>
+  </div>
+</div>
+
+<script>
+/* ═══ ESTADO ═══ */
+const PLANES = {
+  free:   { label:'Plan Free', max:10,  clase:'free'   },
+  pro100: { label:'PRO 100',   max:100, clase:'pro100' },
+  pro500: { label:'PRO 500',   max:500, clase:'pro500' },
+};
+const CODIGOS = {
+  pro100: ['PRO100-DEMO-2024','DIAN-100-ABCD','CODE-PRO-0100'],
+  pro500: ['PRO500-DEMO-2024','DIAN-500-WXYZ','CODE-PRO-0500'],
+};
+// ── URL DEL BACKEND ──────────────────────────────────────────────────
+// Detecta automáticamente si está en Railway o en local
+const API = (() => {
+  const h = window.location.hostname;
+  // Si el HTML se abre desde Railway → usa ruta relativa (mismo dominio, sin CORS)
+  if (h.includes('railway.app') || h.includes('onrender.com')) {
+    return window.location.origin + '/consultar-rut';
+  }
+  // Si el HTML se abre desde Google Sites u otro dominio → apunta a Railway
+  return 'https://search-nit-dian.up.railway.app/consultar-rut';
+})();
+console.log('[ConsultaRUT] API URL:', API);
+const st  = { plan:'free', usados:0, historial:[], nits:[], resultados:[], planModal:'pro100' };
+
+/* ═══ CUOTA / UI ═══ */
+function maxQ() { return PLANES[st.plan].max; }
+function actualizarUI() {
+  const pct = Math.min(100, (st.usados / maxQ()) * 100);
+  const fill = document.getElementById('quotaFill');
+  fill.style.width = pct + '%';
+  fill.className   = 'quota-fill' + (pct>=100?' full':pct>=80?' warn':'');
+  document.getElementById('quotaNumbers').textContent = `${st.usados} / ${maxQ()} consultas utilizadas`;
+  const p = PLANES[st.plan];
+  document.getElementById('planDisplay').innerHTML =
+    `<span class="plan-pill ${p.clase}"><span class="plan-dot"></span>${p.label}</span>`;
+}
+function puedeConsultar(n=1) { return st.usados + n <= maxQ(); }
+
+/* ═══ MODAL ═══ */
+function openModal() {
+  document.getElementById('modalOverlay').classList.add('open');
+  document.getElementById('codInput').value = '';
+  document.getElementById('modalErr').classList.remove('show');
+  document.getElementById('codInput').classList.remove('err-inp');
+}
+function closeModal() { document.getElementById('modalOverlay').classList.remove('open'); }
+function closeModalOutside(e) { if(e.target.id==='modalOverlay') closeModal(); }
+function selectPlan(p) {
+  st.planModal = p;
+  document.getElementById('opt100').classList.toggle('sel', p==='pro100');
+  document.getElementById('opt500').classList.toggle('sel', p==='pro500');
+}
+function activarCodigo() {
+  const cod = document.getElementById('codInput').value.trim();
+  if (!CODIGOS[st.planModal].includes(cod)) {
+    document.getElementById('modalErr').classList.add('show');
+    document.getElementById('codInput').classList.add('err-inp');
+    return;
+  }
+  st.plan   = st.planModal;
+  st.usados = 0;
+  actualizarUI();
+  closeModal();
+  toast(`✅ ${PLANES[st.planModal].label} activado. Límite: ${maxQ()} consultas.`, 'info');
+}
+
+/* ═══ TABS ═══ */
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  btn.classList.add('active');
+}
+
+/* ═══ INDIVIDUAL ═══ */
+async function consultarInd() {
+  const nit = document.getElementById('nitInput').value.trim();
+  console.log('[ConsultaRUT] Botón presionado. NIT:', nit, '| API:', API);
+
+  if (!nit) {
+    document.getElementById('resultInd').innerHTML =
+      '<div class="msg-box warn">⚠ Ingresa un NIT antes de consultar.</div>';
+    return;
+  }
+  if (!puedeConsultar()) {
+    document.getElementById('resultInd').innerHTML =
+      `<div class="msg-box warn">⚠ Alcanzaste el límite de ${maxQ()} consultas. Activa un código para continuar.</div>`;
+    return;
+  }
+  const btn = document.getElementById('btnBuscar');
+  document.getElementById('btnTxt').innerHTML = '<span class="spin">⟳</span>';
+  btn.disabled = true;
+  document.getElementById('resultInd').innerHTML =
+    '<div class="msg-box info">⟳ Consultando... por favor espera.</div>';
+  try {
+    console.log('[ConsultaRUT] Llamando a fetchDIAN...');
+    const d = await fetchDIAN(nit);
+    console.log('[ConsultaRUT] Respuesta recibida:', d);
+    st.usados++; actualizarUI();
+    mostrarResultInd(d);
+    addHistorial(d, nit);
+  } catch(e) {
+    console.error('[ConsultaRUT] Error:', e);
+    document.getElementById('resultInd').innerHTML =
+      `<div class="msg-box err">⚠ ${e.message}</div>`;
+  }
+  document.getElementById('btnTxt').textContent = 'Consultar Estado RUT';
+  btn.disabled = false;
+}
+
+function mostrarResultInd(d) {
+  const cl = ce(d.estado);
+  document.getElementById('resultInd').innerHTML = `
+    <div class="result-box">
+      <div class="result-head ${cl}">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase">
+          Resultado de consulta${d.demo?'<span class="demo-tag">[DEMO]</span>':''}
+        </span>
+        <span class="estado-chip ${cl}">${d.estado}</span>
+      </div>
+      <div class="result-body">
+        <div class="result-grid">
+          <div class="rf" style="grid-column:1/-1">
+            <span class="rf-lbl">${d.tipoPersona==='JURÍDICA'?'Razón social':'Nombre completo'}</span>
+            <span class="rf-val big">${d.nombre||'—'}</span>
+          </div>
+          <div class="rf">
+            <span class="rf-lbl">NIT / Documento</span>
+            <span class="rf-val">${d.numDoc}</span>
+          </div>
+          <div class="rf">
+            <span class="rf-lbl">Tipo de persona</span>
+            <span class="rf-val">${d.tipoPersona||'—'}</span>
+          </div>
+          <div class="rf">
+            <span class="rf-lbl">Fecha de consulta</span>
+            <span class="rf-val">${d.fechaConsulta}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+/* ═══ HISTORIAL ═══ */
+function addHistorial(d, nit) {
+  st.historial.unshift({d, nit});
+  if (st.historial.length > 20) st.historial.pop();
+  renderHist();
+}
+function renderHist() {
+  if (!st.historial.length) return;
+  document.getElementById('histSec').style.display = 'block';
+  document.getElementById('histList').innerHTML = st.historial.map((h,i)=>`
+    <div class="hist-item" onclick="recargarHist(${i})">
+      <div>
+        <div class="hist-nit">${h.nit}</div>
+        <div class="hist-name">${h.d.nombre||'—'}</div>
+      </div>
+      <div style="text-align:right">
+        <div class="td-estado" style="justify-content:flex-end;margin-bottom:3px">
+          <span class="dot ${ce(h.d.estado)}"></span>${h.d.estado}
+        </div>
+        <div class="hist-time">${h.d.fechaConsulta}</div>
+      </div>
+    </div>`).join('');
+}
+function recargarHist(i) {
+  const h = st.historial[i];
+  document.getElementById('nitInput').value = h.nit;
+  mostrarResultInd(h.d);
+}
+function limpiarHist() {
+  st.historial = [];
+  document.getElementById('histSec').style.display = 'none';
+}
+
+/* ═══ MASIVA ═══ */
+function dragOver(e)  { e.preventDefault(); document.getElementById('dropZone').classList.add('drag'); }
+function dragLeave()  { document.getElementById('dropZone').classList.remove('drag'); }
+function dropFile(e)  { e.preventDefault(); document.getElementById('dropZone').classList.remove('drag'); const f=e.dataTransfer.files[0]; if(f)procesarArchivo(f); }
+function cargarArchivo(e) { const f=e.target.files[0]; if(f)procesarArchivo(f); }
+
+function procesarArchivo(file) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    let nits = [];
+    if (file.name.toLowerCase().endsWith('.csv')) {
+      nits = e.target.result.split('\n').map(l=>l.split(',')[0].trim().replace(/\D/g,'')).filter(n=>n.length>4);
+    } else {
+      const wb = XLSX.read(e.target.result,{type:'binary'});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      XLSX.utils.sheet_to_json(ws,{header:1}).forEach(r=>{
+        const v = String(r[0]||'').trim().replace(/\D/g,'');
+        if (v.length>4) nits.push(v);
+      });
+    }
+    nits = [...new Set(nits)];
+    if (nits.length > maxQ()) {
+      toast(`⚠ El archivo tiene ${nits.length} registros. Se procesarán los primeros ${maxQ()} según tu plan.`, 'warn');
+      nits = nits.slice(0, maxQ());
+    }
+    st.nits      = nits;
+    st.resultados = nits.map(n=>({nit:n,nombre:'—',tipoPersona:'—',estado:'PENDIENTE',fechaConsulta:'—'}));
+    renderPreview();
+  };
+  file.name.toLowerCase().endsWith('.csv') ? reader.readAsText(file,'utf-8') : reader.readAsBinaryString(file);
+}
+
+function renderPreview() {
+  document.getElementById('previewSec').style.display = 'block';
+  document.getElementById('previewCount').textContent = `${st.nits.length} registros`;
+  const rows = st.resultados.slice(0,15).map((r,i)=>`
+    <tr><td>${i+1}</td><td>${r.nit}</td>
+    <td><span class="td-estado"><span class="dot pendiente"></span>Pendiente</span></td></tr>`).join('');
+  const extra = st.nits.length>15
+    ? `<tr><td colspan="3" style="color:var(--muted);text-align:center;font-style:italic">... y ${st.nits.length-15} registros más</td></tr>` : '';
+  document.getElementById('previewBody').innerHTML = rows + extra;
+}
+
+async function iniciarMasiva() {
+  if (!st.nits.length) return;
+  const rest = maxQ() - st.usados;
+  if (rest <= 0) { toast('⚠ Sin cuota disponible. Activa un código.','warn'); return; }
+  if (rest < st.nits.length) {
+    toast(`⚠ Solo puedes consultar ${rest} más. Procesando primeros ${rest}.`,'warn');
+    st.nits      = st.nits.slice(0,rest);
+    st.resultados = st.resultados.slice(0,rest);
+  }
+  document.getElementById('btnIniciar').disabled = true;
+  document.getElementById('progressSec').style.display = 'block';
+  const total = st.nits.length;
+  for (let i=0; i<total; i++) {
+    document.getElementById('progressMsg').textContent = `Consultando ${i+1} de ${total}...`;
+    try {
+      const d = await fetchDIAN(st.nits[i]);
+      st.resultados[i] = {nit:st.nits[i], ...d};
+      st.usados++;
+    } catch {
+      st.resultados[i] = {nit:st.nits[i],nombre:'Error',tipoPersona:'—',estado:'ERROR',fechaConsulta:ahora()};
+    }
+    const pct = Math.round(((i+1)/total)*100);
+    document.getElementById('progressBar').style.width = pct+'%';
+    document.getElementById('progressPct').textContent = pct+'%';
+    actualizarUI();
+    renderTablaMasiva();
+    await sleep(900);
+  }
+  document.getElementById('btnIniciar').disabled = false;
+  document.getElementById('btnExportar').disabled = false;
+  document.getElementById('progressSec').style.display = 'none';
+  toast(`✅ Consulta finalizada. ${total} registros procesados.`,'info');
+}
+
+function renderTablaMasiva() {
+  document.getElementById('resultadosMasivos').innerHTML = `
+    <div class="table-wrap scroll">
+      <table>
+        <thead><tr><th>#</th><th>NIT</th><th>Nombre / Razón Social</th><th>Tipo</th><th>Estado RUT</th><th>Fecha consulta</th></tr></thead>
+        <tbody>${st.resultados.map((r,i)=>`
+          <tr>
+            <td>${i+1}</td><td>${r.nit}</td><td>${r.nombre||'—'}</td>
+            <td>${r.tipoPersona||'—'}</td>
+            <td><span class="td-estado"><span class="dot ${ce(r.estado)}"></span>${r.estado}</span></td>
+            <td>${r.fechaConsulta||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>`;
+}
+
+function exportarExcel() {
+  const rows = [['#','NIT / Documento','Nombre / Razón Social','Tipo de Persona','Estado RUT','Fecha Consulta']];
+  st.resultados.forEach((r,i)=>rows.push([i+1,r.nit,r.nombre||'',r.tipoPersona||'',r.estado,r.fechaConsulta||'']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Consulta RUT DIAN');
+  XLSX.writeFile(wb,`ConsultaRUT_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
+function resetMasiva() {
+  st.nits=[]; st.resultados=[];
+  document.getElementById('previewSec').style.display='none';
+  document.getElementById('resultadosMasivos').innerHTML='';
+  document.getElementById('progressSec').style.display='none';
+  document.getElementById('fileInput').value='';
+  document.getElementById('btnExportar').disabled=true;
+}
+
+/* ═══ FETCH DIAN ═══ */
+async function fetchDIAN(nit) {
+  console.log('[fetchDIAN] Iniciando petición a:', API, '| NIT:', nit);
+  let res;
+  try {
+    res = await fetch(API, {
+      method:  'POST',
+      headers: {'Content-Type': 'application/json'},
+      body:    JSON.stringify({numDoc: nit}),
+      signal:  AbortSignal.timeout(20000),
+    });
+  } catch(e) {
+    if (e.name === 'TimeoutError')
+      throw new Error('El servidor tardó demasiado en responder. Verifica que el backend esté activo en: ' + API);
+    throw new Error('No se pudo conectar al backend (' + e.message + '). URL configurada: ' + API);
+  }
+  let body;
+  try { body = await res.json(); }
+  catch { throw new Error('El servidor respondió con status ' + res.status + ' pero sin JSON válido.'); }
+  if (!res.ok || body.error)
+    throw new Error(body.error || 'Error del servidor: ' + res.status);
+  return body;
+}
+
+/* ═══ UTILS ═══ */
+function ce(e='') {
+  const s=e.toLowerCase();
+  if(s.includes('activ')||s.includes('inscrit')) return 'activo';
+  if(s.includes('suspend')||s.includes('cancel')||s.includes('error')) return 'suspendido';
+  return 'inactivo';
+}
+function ahora() {
+  return new Date().toLocaleString('es-CO',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+let _tid;
+function toast(txt,tipo='info') {
+  clearTimeout(_tid);
+  document.querySelectorAll('.toast').forEach(e=>e.remove());
+  const el=document.createElement('div');
+  el.className=`toast msg-box ${tipo}`;
+  el.textContent=txt;
+  document.body.appendChild(el);
+  _tid=setTimeout(()=>el.remove(),5000);
+}
+
+actualizarUI();
+</script>
+</body>
+</html>
